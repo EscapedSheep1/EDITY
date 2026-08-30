@@ -1,0 +1,16 @@
+{
+    "m_Version": 10,
+    "TraderName": "Weapons",
+    "DisplayName": "Weapons Trader",
+    "TraderIcon": "Shotgun",
+    "Currencies": [
+        "ExpansionBanknoteEuro"
+    ],
+    "Categories": [
+        "Assault_Rifles:1",
+        "Missing_Category:1"
+    ],
+    "Items": {
+        "akm": 1
+    }
+}

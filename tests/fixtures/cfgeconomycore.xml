@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<economycore>
+    <classes>
+    </classes>
+    <defaults>
+    </defaults>
+    <ce folder="db">
+        <file name="types.xml" type="types" />
+        <file name="spawnabletypes.xml" type="spawnabletypes" />
+        <file name="events.xml" type="events" />
+    </ce>
+    <ce folder="CustomTypes">
+        <file name="Carpack_types.xml" type="types" />
+    </ce>
+</economycore>

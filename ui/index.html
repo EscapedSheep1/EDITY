@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>EDITY</title>
+  <link rel="icon" type="image/png" href="icon.png">
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <div class="scanlines" aria-hidden="true"></div>
+  <div class="app">
+    <header class="hud-bar">
+      <div class="hud-left">
+        <div class="brand">
+          <img class="brand-mark" src="icon.png" alt="">
+          <div>
+            <div class="brand-name">EDITY</div>
+            <div class="brand-sub">EXPANSION TRADER DESK</div>
+          </div>
+        </div>
+        <div class="hud-status">
+          <span class="pulse" id="statusPulse"></span>
+          <span id="statusText">STANDBY</span>
+        </div>
+      </div>
+      <button class="btn upload-all" id="uploadBtn" disabled title="Upload every saved local change to the server">Upload all changes</button>
+      <div class="hud-meta" id="hudMeta">NO LINK</div>
+    </header>
+
+    <nav class="rail" id="rail">
+      <button class="rail-btn active" data-view="connections">LINK</button>
+      <button class="rail-btn" data-view="market" disabled>MARKET</button>
+      <button class="rail-btn" data-view="traders" disabled>TRADERS</button>
+      <button class="rail-btn" data-view="zones" disabled>ZONES</button>
+      <button class="rail-btn" data-view="types" disabled>TYPES</button>
+      <button class="rail-btn" data-view="backups" disabled>BACKUPS</button>
+      <div class="rail-spacer"></div>
+      <button class="rail-btn ghost" id="validateBtn" disabled>LINT</button>
+    </nav>
+
+    <main class="stage" id="stage"></main>
+
+    <footer class="ticker">
+      <span id="tickerText">Ready. Configure a link and pull Market / Traders / TraderZones.</span>
+      <span id="dirtyBadge" class="badge hidden">0 dirty</span>
+    </footer>
+  </div>
+
+  <aside class="drawer" id="drawer">
+    <div class="drawer-head">
+      <h2>VALIDATION <small>Click an issue to jump. Missing items can be added to a market file.</small></h2>
+      <button class="icon-btn" id="drawerClose">CLOSE</button>
+    </div>
+    <div class="drawer-body" id="drawerBody"></div>
+  </aside>
+
+  <div class="modal hidden" id="addMissing">
+    <div class="modal-card">
+      <h2>ADD MISSING ITEM</h2>
+      <p class="lede" id="addMissingMeta">This classname is not in any market file.</p>
+      <div class="field">
+        <label>ADD TO MARKET FILE</label>
+        <select id="addMissingFile"></select>
+      </div>
+      <div class="field">
+        <label>OR CREATE NEW FILE</label>
+        <input id="addMissingNew" placeholder="Attachments" autocomplete="off">
+      </div>
+      <div class="modal-actions">
+        <button class="btn ghost" id="addMissingCancel">Cancel</button>
+        <button class="btn" id="addMissingOk">Add item</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal hidden" id="modal">
+    <div class="modal-card">
+      <h2 id="modalTitle">Confirm</h2>
+      <p id="modalBody"></p>
+      <div class="modal-actions">
+        <button class="btn ghost" id="modalCancel">Cancel</button>
+        <button class="btn danger" id="modalOk">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal hidden" id="browser">
+    <div class="modal-card browser-card">
+      <h2>SELECT SERVER FOLDERS</h2>
+      <p class="lede" id="browserHint">Walk the FTP and mark the Market, Traders, and TraderZones directories. Those are the folders that contain the JSON files.</p>
+      <div class="browser-path" id="browserPath">/</div>
+      <div class="browser-list" id="browserList"></div>
+      <div class="browser-picks">
+        <div><span>Market</span><code id="pickMarket">not set</code></div>
+        <div><span>Traders</span><code id="pickTraders">not set</code></div>
+        <div><span>TraderZones</span><code id="pickZones">not set</code></div>
+      </div>
+      <div class="modal-actions wrap">
+        <button class="btn ghost" id="browserUp">Up</button>
+        <button class="btn ghost" id="browserAuto">Auto-detect here</button>
+        <button class="btn ghost" id="useMarket">Use as Market</button>
+        <button class="btn ghost" id="useTraders">Use as Traders</button>
+        <button class="btn ghost" id="useZones">Use as Zones</button>
+        <button class="btn ghost" id="browserCancel">Cancel</button>
+        <button class="btn" id="browserApply">Save paths</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal hidden" id="typesWizard">
+    <div class="modal-card wizard-card">
+      <div class="wizard-head">
+        <div>
+          <h2 id="typesTitle">ADD FROM TYPES</h2>
+          <p class="lede" id="typesMeta">Types come from db/types.xml and cfgeconomycore.xml in the mission folder on the server.</p>
+        </div>
+        <button class="btn ghost" id="typesPickFolder">Refresh from mission</button>
+      </div>
+      <div class="wizard-help">
+        Filter examples: <code>ak</code> · <code>ak &amp;&amp; wood</code> · <code>!drum</code> · <code>ak &amp;&amp; !mag</code> · <code>ak || m4</code>
+        <span id="typesAttachHint" class="hidden"> · Click an attachment to add another of the same. Use − to remove one. Lint will ask you to create items that are not in a market file yet.</span>
+      </div>
+      <div class="wizard-filter">
+        <input id="typesFilter" placeholder="Filter classnames, categories, or files">
+        <label class="check" id="typesHideUsedWrap"><input type="checkbox" id="typesHideUsed" checked> Hide already in market or variants</label>
+      </div>
+      <div class="wizard-tools">
+        <button class="btn ghost" type="button" id="typesSelectVisible">Select visible</button>
+        <button class="btn ghost" type="button" id="typesClearSel">Clear selection</button>
+        <span id="typesCounts">0 shown</span>
+      </div>
+      <div class="wizard-list" id="typesList"></div>
+      <div class="wizard-dest" id="typesDestBox">
+        <strong>Put selected items into</strong>
+        <label class="check"><input type="radio" name="typesDest" value="current" checked> Current market file</label>
+        <label class="check"><input type="radio" name="typesDest" value="existing"> Existing file
+          <select id="typesDestFile"></select>
+        </label>
+        <label class="check"><input type="radio" name="typesDest" value="new"> New market file
+          <input id="typesNewName" placeholder="Carpack_Parts">
+        </label>
+      </div>
+      <div class="modal-actions wrap">
+        <button class="btn ghost" id="typesAddBlank">Add blank item instead</button>
+        <button class="btn ghost" id="typesCancel">Cancel</button>
+        <button class="btn" id="typesAdd">Add selected</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="ctx hidden" id="ctx">
+    <button type="button" data-ctx="variant">Make variant of…</button>
+    <button type="button" data-ctx="delete">Delete selected</button>
+    <button type="button" data-ctx="infinite">Set Infinite Stock</button>
+    <button type="button" data-ctx="dupes">Remove duplicate classnames</button>
+  </div>
+  <div class="ctx hidden" id="ctxTypes">
+    <button type="button" data-ctx-type="dup">Duplicate</button>
+    <button type="button" data-ctx-type="disable">Set nominal 0</button>
+    <button type="button" data-ctx-type="copy">Copy classnames</button>
+    <button type="button" data-ctx-type="delete">Remove selected</button>
+  </div>
+
+  <div class="modal hidden" id="variantPick">
+    <div class="modal-card wizard-card">
+      <h2>MAKE VARIANT OF</h2>
+      <p class="lede" id="variantPickMeta">Choose the parent entry in this file. Selected items will be removed and added to its Variants.</p>
+      <div class="wizard-filter">
+        <input id="variantPickFilter" placeholder="Filter classnames in this file" autocomplete="off">
+      </div>
+      <div class="wizard-list" id="variantPickList"></div>
+      <div class="modal-actions">
+        <button class="btn ghost" id="variantPickCancel">Cancel</button>
+      </div>
+    </div>
+  </div>
+  <div class="toasts" id="toasts"></div>
+  <div class="progress hidden" id="progress">
+    <div class="progress-card">
+      <div class="progress-label" id="progressLabel">Working…</div>
+      <div class="bar"><div class="bar-fill" id="progressFill"></div></div>
+    </div>
+  </div>
+
+  <div class="icon-menu hidden" id="iconMenu">
+    <input class="icon-search" id="iconSearch" placeholder="Filter icons" autocomplete="off">
+    <div class="icon-grid" id="iconGrid"></div>
+  </div>
+
+  <script src="js/expansion-icons.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

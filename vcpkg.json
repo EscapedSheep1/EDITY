@@ -1,0 +1,12 @@
+{
+  "name": "edity",
+  "version-string": "1.0.0",
+  "dependencies": [
+    {
+      "name": "curl",
+      "default-features": false,
+      "features": ["ssl", "ssh"]
+    },
+    "nlohmann-json"
+  ]
+}

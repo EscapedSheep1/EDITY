@@ -1,0 +1,16 @@
+{
+    "m_Version": 6,
+    "m_DisplayName": "Green Mountain",
+    "Position": [
+        3700.0,
+        400.0,
+        6000.0
+    ],
+    "Radius": 80.0,
+    "BuyPricePercent": 100.0,
+    "SellPricePercent": -1.0,
+    "Stock": {
+        "akm": 12,
+        "ghost_item": 3
+    }
+}

@@ -1,0 +1,23 @@
+{
+    "m_Version": 13,
+    "DisplayName": "Starter Weapons",
+    "MinRequiredReputation": 0,
+    "MaxRequiredReputation": 2147483647,
+    "RequiredFaction": "",
+    "RequiredCompletedQuestID": -1,
+    "TraderIcon": "Gun",
+    "Currencies": [
+        "expansionbanknotehryvnia"
+    ],
+    "DisplayCurrencyValue": 1,
+    "DisplayCurrencyName": "",
+    "UseCategoryOrder": 0,
+    "FutureProofKey": "keep-me",
+    "Categories": [
+        "Assault_Rifles:1",
+        "Pistols:0"
+    ],
+    "Items": {
+        "Battery9V": 3
+    }
+}
