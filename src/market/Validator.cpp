@@ -274,6 +274,78 @@ std::vector<ValidationIssue> ValidateWorkspace(const WorkspaceSnapshot& snap) {
         }
     }
 
+    std::unordered_set<std::string> typeNames = allClassNames;
+    for (const auto& file : snap.typesFiles) {
+        for (const auto& type : file.types) {
+            const auto key = ToLowerAscii(Trim(type.name));
+            if (!key.empty()) {
+                typeNames.insert(key);
+            }
+        }
+    }
+    std::unordered_set<std::string> loadoutFiles;
+    for (const auto& file : snap.loadouts) {
+        loadoutFiles.insert(ToLowerAscii(file.filename));
+        loadoutFiles.insert(ToLowerAscii(FileStem(file.filename)));
+    }
+
+    const auto walkLoadout = [&](auto&& self, const LoadoutFile& file, const LoadoutNode& node,
+                                 const std::string& where, int itemIndex, bool allowEmptyName) -> void {
+        const auto name = Trim(node.className);
+        if (name.empty() && Trim(node.includeFile).empty() && !allowEmptyName) {
+            Add(issues, ValidationIssue::Severity::Error, FileKind::Loadout, file.filename, "ClassName",
+                "Loadout entry needs a ClassName or Include", itemIndex);
+        }
+        if (node.chance < 0.0 || node.chance > 1.0) {
+            Add(issues, ValidationIssue::Severity::Error, FileKind::Loadout, file.filename, name.empty() ? where : name,
+                "Chance must be between 0 and 1", itemIndex);
+        }
+        if (node.quantityMin > node.quantityMax) {
+            Add(issues, ValidationIssue::Severity::Error, FileKind::Loadout, file.filename, name.empty() ? where : name,
+                "Quantity min must be less than or equal to max", itemIndex);
+        }
+        for (const auto& health : node.health) {
+            if (health.min < 0.0 || health.max > 1.0 || health.min > health.max) {
+                Add(issues, ValidationIssue::Severity::Error, FileKind::Loadout, file.filename, name.empty() ? where : name,
+                    "Health min/max must be 0-1 and min <= max", itemIndex);
+            }
+        }
+        if (!name.empty()) {
+            const auto key = ToLowerAscii(name);
+            const auto survivor = key.rfind("survivorm_", 0) == 0 || key.rfind("survivorf_", 0) == 0;
+            if (!survivor && !typeNames.empty() && !typeNames.contains(key)) {
+                Add(issues, ValidationIssue::Severity::Warning, FileKind::Loadout, file.filename, name,
+                    "Classname is not in the pulled types catalog", itemIndex);
+            }
+        }
+        if (!Trim(node.includeFile).empty()) {
+            auto inc = ToLowerAscii(Trim(node.includeFile));
+            if (!EndsWithI(inc, ".json")) {
+                inc += ".json";
+            }
+            if (!loadoutFiles.contains(inc) && !loadoutFiles.contains(ToLowerAscii(FileStem(inc)))) {
+                Add(issues, ValidationIssue::Severity::Warning, FileKind::Loadout, file.filename, node.includeFile,
+                    "Include file is not in the Loadouts folder", itemIndex);
+            }
+        }
+        int child = 0;
+        for (const auto& [slot, items] : node.attachments) {
+            for (const auto& item : items) {
+                self(self, file, item, slot.empty() ? "Attachments" : slot, child++, false);
+            }
+        }
+        for (const auto& item : node.cargo) {
+            self(self, file, item, "Cargo", child++, false);
+        }
+        for (const auto& item : node.sets) {
+            self(self, file, item, "Sets", child++, true);
+        }
+    };
+
+    for (const auto& file : snap.loadouts) {
+        walkLoadout(walkLoadout, file, file.root, "Root", -1, false);
+    }
+
     return issues;
 }
 

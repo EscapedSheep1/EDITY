@@ -9,7 +9,7 @@
 namespace edity {
 
 enum class Protocol { Ftp, Ftps, Sftp };
-enum class FileKind { Market, Trader, TraderZone, Types };
+enum class FileKind { Market, Trader, TraderZone, Types, Loadout };
 
 inline const char* KindName(FileKind kind) {
     switch (kind) {
@@ -21,6 +21,8 @@ inline const char* KindName(FileKind kind) {
             return "TraderZones";
         case FileKind::Types:
             return "Types";
+        case FileKind::Loadout:
+            return "Loadouts";
     }
     return "Market";
 }
@@ -34,6 +36,9 @@ inline FileKind KindFromName(std::string_view name) {
     }
     if (name == "Types" || name == "Type") {
         return FileKind::Types;
+    }
+    if (name == "Loadouts" || name == "Loadout") {
+        return FileKind::Loadout;
     }
     return FileKind::Market;
 }
@@ -71,6 +76,7 @@ struct ConnectionProfile {
     std::string marketPath;
     std::string tradersPath;
     std::string zonesPath;
+    std::string loadoutsPath;
 };
 
 struct MarketItem {
@@ -133,6 +139,30 @@ struct TraderZone {
     double sellPricePercent = -1;
     std::vector<std::pair<std::string, int>> stock;
     nlohmann::json extras = nlohmann::json::object();
+};
+
+struct LoadoutHealth {
+    double min = 1.0;
+    double max = 1.0;
+    std::string zone;
+};
+
+struct LoadoutNode {
+    std::string className;
+    std::string includeFile;
+    double chance = 1.0;
+    double quantityMin = 0.0;
+    double quantityMax = 0.0;
+    std::vector<LoadoutHealth> health;
+    std::vector<std::pair<std::string, std::vector<LoadoutNode>>> attachments;
+    std::vector<LoadoutNode> cargo;
+    std::vector<LoadoutNode> sets;
+    std::vector<std::string> constructionParts;
+};
+
+struct LoadoutFile {
+    std::string filename;
+    LoadoutNode root;
 };
 
 struct QuarantineFile {

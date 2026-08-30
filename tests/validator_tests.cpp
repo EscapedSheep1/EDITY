@@ -4,6 +4,7 @@
 #include "market/Validator.h"
 #include "types/TypesCatalog.h"
 #include "types/TypesXmlIO.h"
+#include "loadout/LoadoutIO.h"
 
 #include <filesystem>
 #include <iostream>
@@ -256,6 +257,69 @@ int main() {
         JsonFileName("New Category") != "New_Category.json") {
         ++failed;
         Fail("JsonFileName must keep the .json extension on existing files");
+    }
+
+    const auto loadout = ParseLoadout("HumanLoadout.json", Load(fixtures, "HumanLoadout.json"));
+    if (!loadout.ok || loadout.file.root.className != "SurvivorM_Jose" ||
+        loadout.file.root.attachments.size() != 1 || loadout.file.root.attachments[0].second.size() != 2 ||
+        loadout.file.root.attachments[0].second[0].className != "TacticalShirt_Black" ||
+        loadout.file.root.cargo.size() != 1 || loadout.file.root.cargo[0].className != "Rag" ||
+        loadout.file.root.cargo[0].quantityMin != 4.0 || loadout.file.root.sets.size() != 1 ||
+        !loadout.file.root.sets[0].className.empty()) {
+        ++failed;
+        Fail("classic Expansion loadouts must parse Attachments, Inventory, and Sets");
+    }
+    const auto loadoutRound = ParseLoadout("HumanLoadout.json", SerializeLoadout(loadout.file));
+    if (!loadoutRound.ok || loadoutRound.file.root.cargo[0].quantityMax != 4.0 ||
+        loadoutRound.file.root.sets[0].chance != 0.5 ||
+        SerializeLoadout(loadout.file).find("InventoryAttachments") == std::string::npos) {
+        ++failed;
+        Fail("loadouts must serialize the modern Expansion tree and round-trip");
+    }
+    const auto loadoutUi = LoadoutFromUi(LoadoutToUi(loadout.file));
+    if (loadoutUi.root.className != "SurvivorM_Jose" || loadoutUi.root.cargo.size() != 1) {
+        ++failed;
+        Fail("loadout UI mapping must keep the tree");
+    }
+    const auto spawnSettings = ParseLoadout("SpawnSettings.json", R"({"StartingGear":[],"StartingClothing":[]})");
+    if (spawnSettings.ok) {
+        ++failed;
+        Fail("SpawnSettings.json must not be accepted as a loadout");
+    }
+
+    WorkspaceSnapshot loadoutSnap;
+    loadoutSnap.loadouts = {loadout.file};
+    TypesDocument typeDoc;
+    typeDoc.relPath = "db/types.xml";
+    typeDoc.types.push_back(DefaultType("Rag"));
+    typeDoc.types.push_back(DefaultType("AKM"));
+    loadoutSnap.typesFiles.push_back(typeDoc);
+    const auto loadoutIssues = ValidateWorkspace(loadoutSnap);
+    if (!HasWarning(loadoutIssues, "not in the pulled types catalog")) {
+        ++failed;
+        Fail("unknown loadout classnames should warn against the types catalog");
+    }
+    if (HasError(loadoutIssues, "ClassName or Include")) {
+        ++failed;
+        Fail("empty ClassName on a Set must be allowed");
+    }
+
+    LoadoutFile badChance = DefaultLoadout("BadChance.json");
+    badChance.root.chance = 2.0;
+    WorkspaceSnapshot chanceSnap;
+    chanceSnap.loadouts = {badChance};
+    if (!HasError(ValidateWorkspace(chanceSnap), "Chance must be between 0 and 1")) {
+        ++failed;
+        Fail("loadout Chance outside 0-1 must be an error");
+    }
+
+    LoadoutFile missingInclude = DefaultLoadout("HasInclude.json");
+    missingInclude.root.includeFile = "PoliceLoadout.json";
+    WorkspaceSnapshot includeSnap;
+    includeSnap.loadouts = {missingInclude};
+    if (!HasWarning(ValidateWorkspace(includeSnap), "Include file is not in the Loadouts folder")) {
+        ++failed;
+        Fail("missing Include target should warn");
     }
 
     if (failed == 0) {

@@ -34,15 +34,19 @@
       <button class="rail-btn" data-view="traders" disabled>TRADERS</button>
       <button class="rail-btn" data-view="zones" disabled>ZONES</button>
       <button class="rail-btn" data-view="types" disabled>TYPES</button>
+      <button class="rail-btn" data-view="loadouts" disabled>LOADOUTS</button>
       <button class="rail-btn" data-view="backups" disabled>BACKUPS</button>
       <div class="rail-spacer"></div>
       <button class="rail-btn ghost" id="validateBtn" disabled>LINT</button>
     </nav>
 
-    <main class="stage" id="stage"></main>
+    <main class="stage" id="stage">
+      <h1>UPLINK</h1>
+      <p class="lede">Starting HUD…</p>
+    </main>
 
     <footer class="ticker">
-      <span id="tickerText">Ready. Configure a link and pull Market / Traders / TraderZones.</span>
+      <span id="tickerText">Ready. Configure a link and pull Market / Traders / TraderZones / Loadouts.</span>
       <span id="dirtyBadge" class="badge hidden">0 dirty</span>
     </footer>
   </div>
@@ -88,13 +92,14 @@
   <div class="modal hidden" id="browser">
     <div class="modal-card browser-card">
       <h2>SELECT SERVER FOLDERS</h2>
-      <p class="lede" id="browserHint">Walk the FTP and mark the Market, Traders, and TraderZones directories. Those are the folders that contain the JSON files.</p>
+      <p class="lede" id="browserHint">Walk the FTP and mark the Market, Traders, TraderZones, and Loadouts directories.</p>
       <div class="browser-path" id="browserPath">/</div>
       <div class="browser-list" id="browserList"></div>
       <div class="browser-picks">
         <div><span>Market</span><code id="pickMarket">not set</code></div>
         <div><span>Traders</span><code id="pickTraders">not set</code></div>
         <div><span>TraderZones</span><code id="pickZones">not set</code></div>
+        <div><span>Loadouts</span><code id="pickLoadouts">not set</code></div>
       </div>
       <div class="modal-actions wrap">
         <button class="btn ghost" id="browserUp">Up</button>
@@ -102,6 +107,7 @@
         <button class="btn ghost" id="useMarket">Use as Market</button>
         <button class="btn ghost" id="useTraders">Use as Traders</button>
         <button class="btn ghost" id="useZones">Use as Zones</button>
+        <button class="btn ghost" id="useLoadouts">Use as Loadouts</button>
         <button class="btn ghost" id="browserCancel">Cancel</button>
         <button class="btn" id="browserApply">Save paths</button>
       </div>
@@ -123,7 +129,7 @@
       </div>
       <div class="wizard-filter">
         <input id="typesFilter" placeholder="Filter classnames, categories, or files">
-        <label class="check" id="typesHideUsedWrap"><input type="checkbox" id="typesHideUsed" checked> Hide already in market or variants</label>
+        <label class="check" id="typesHideUsedWrap"><input type="checkbox" id="typesHideUsed" checked> <span id="typesHideUsedLabel">Hide already in market or variants</span></label>
       </div>
       <div class="wizard-tools">
         <button class="btn ghost" type="button" id="typesSelectVisible">Select visible</button>
@@ -131,6 +137,14 @@
         <span id="typesCounts">0 shown</span>
       </div>
       <div class="wizard-list" id="typesList"></div>
+      <div class="wizard-dest hidden" id="loadoutDestBox">
+        <strong>Put selected types into this loadout as</strong>
+        <label class="check"><input type="radio" name="loadoutDest" value="slot" checked> Attachment slot
+          <select id="loadoutDestSlot"></select>
+        </label>
+        <label class="check"><input type="radio" name="loadoutDest" value="cargo"> Cargo of the selected item</label>
+        <label class="check"><input type="radio" name="loadoutDest" value="set"> A new chance set</label>
+      </div>
       <div class="wizard-dest" id="typesDestBox">
         <strong>Put selected items into</strong>
         <label class="check"><input type="radio" name="typesDest" value="current" checked> Current market file</label>
@@ -154,6 +168,14 @@
     <button type="button" data-ctx="delete">Delete selected</button>
     <button type="button" data-ctx="infinite">Set Infinite Stock</button>
     <button type="button" data-ctx="dupes">Remove duplicate classnames</button>
+  </div>
+  <div class="ctx hidden" id="ctxLoadout">
+    <button type="button" data-ctx-lo="add-types">Add from types…</button>
+    <button type="button" data-ctx-lo="add-slot">Add attachment slot</button>
+    <button type="button" data-ctx-lo="add-cargo">Add cargo item</button>
+    <button type="button" data-ctx-lo="add-set">Add chance set</button>
+    <button type="button" data-ctx-lo="dup">Duplicate</button>
+    <button type="button" data-ctx-lo="delete">Remove</button>
   </div>
   <div class="ctx hidden" id="ctxTypes">
     <button type="button" data-ctx-type="dup">Duplicate</button>
@@ -188,7 +210,15 @@
     <div class="icon-grid" id="iconGrid"></div>
   </div>
 
-  <script src="js/expansion-icons.js"></script>
-  <script src="js/app.js"></script>
+  <script>
+    window.addEventListener("error", function (ev) {
+      var stage = document.getElementById("stage");
+      if (!stage || stage.dataset.ready) return;
+      stage.innerHTML = "<h1>HUD ERROR</h1><p class='lede'>" +
+        String(ev.message || "Script failed") + " @ " + String(ev.filename || "app.js") + ":" + String(ev.lineno || "?") + "</p>";
+    });
+  </script>
+  <script src="js/expansion-icons.js?v=20260830d"></script>
+  <script src="js/app.js?v=20260830d"></script>
 </body>
 </html>

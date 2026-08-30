@@ -5,6 +5,7 @@
 #include "market/Validator.h"
 #include "types/TypesCatalog.h"
 #include "types/TypesXmlIO.h"
+#include "loadout/LoadoutIO.h"
 
 #include <nlohmann/json.hpp>
 #include <filesystem>
@@ -31,6 +32,7 @@ public:
     void SaveTrader(const nlohmann::json& body);
     void SaveZone(const nlohmann::json& body);
     void SaveTypes(const nlohmann::json& body);
+    void SaveLoadout(const nlohmann::json& body);
     nlohmann::json CreateWorkspaceFile(FileKind kind, const std::string& filename);
     void DeleteWorkspaceFile(FileKind kind, const std::string& filename);
     nlohmann::json ConfirmUpload();
@@ -55,6 +57,7 @@ private:
     TypesCatalog typesCatalog_;
     std::unordered_map<std::string, TypesDocument> typesFiles_;
     std::string economyCoreXml_;
+    std::unordered_map<std::string, LoadoutFile> loadouts_;
 
     std::string RemotePath(FileKind kind) const;
     std::filesystem::path LocalPath(FileKind kind, const std::string& filename) const;

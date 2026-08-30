@@ -3,7 +3,8 @@
     view: "connections",
     profiles: [],
     workspace: null,
-    selected: { market: null, trader: null, zone: null, types: null, item: 0, typeItem: 0 },
+    selected: { market: null, trader: null, zone: null, types: null, loadout: null, item: 0, typeItem: 0 },
+    loadoutPath: [],
     selectedItems: new Set(),
     selectedTypeItems: new Set(),
     lastClickedItem: 0,
@@ -35,7 +36,7 @@
       parent: "",
       entries: [],
       selected: null,
-      picks: { market: "", traders: "", zones: "" },
+      picks: { market: "", traders: "", zones: "", loadouts: "" },
       profile: null,
       password: "",
       jsonCount: 0,
@@ -55,6 +56,7 @@
       marketPath: "/ExpansionMod/Market",
       tradersPath: "/ExpansionMod/Traders",
       zonesPath: "/mpmissions/dayzOffline.chernarusplus/expansion/traderzones",
+      loadoutsPath: "/ExpansionMod/Loadouts",
       password: ""
     };
   }
@@ -160,6 +162,12 @@
     return (ws && ws.issues || []).filter((i) => i.severity === "error").length;
   }
 
+  function workspaceFileCount(ws) {
+    if (!ws) return 0;
+    return (ws.markets || []).length + (ws.traders || []).length + (ws.zones || []).length +
+      (ws.typesFiles || []).length + (ws.loadouts || []).length;
+  }
+
   function applyWorkspace(ws) {
     state.workspace = ws;
     if (ws && ws.types) applyTypesCatalog(ws.types);
@@ -173,7 +181,7 @@
     $("validateBtn").disabled = !ws;
     $("uploadBtn").disabled = !ws;
     if (ws && ws.quarantine && ws.quarantine.length) {
-      const parsed = ((ws.markets || []).length + (ws.traders || []).length + (ws.zones || []).length);
+      const parsed = workspaceFileCount(ws);
       const first = ws.quarantine[0] || {};
       const detail = (first.filename ? first.filename + ": " : "") + (first.error || "failed");
       toast(detail + (ws.quarantine.length > 1 ? "  (+" + (ws.quarantine.length - 1) + " more)" : "") +
@@ -203,6 +211,7 @@
     if (kind === "Traders" || kind === "Trader") return "traders";
     if (kind === "TraderZones" || kind === "Zones") return "zones";
     if (kind === "Types" || kind === "Type") return "types";
+    if (kind === "Loadouts" || kind === "Loadout") return "loadouts";
     return "market";
   }
 
@@ -246,6 +255,10 @@
     } else if (view === "traders") {
       const file = findFileByName(state.workspace.traders, issue.filename);
       if (file) state.selected.trader = file.filename;
+    } else if (view === "loadouts") {
+      const file = findFileByName(state.workspace.loadouts, issue.filename);
+      if (file) state.selected.loadout = file.filename;
+      state.loadoutPath = [];
     } else if (view === "types") {
       const file = findFileByName(state.workspace.typesFiles, issue.filename);
       if (file) state.selected.types = file.filename;
@@ -307,6 +320,10 @@
           const focusId = ({ DisplayName: "trDisplay", MinRequiredReputation: "trMinRep",
             MaxRequiredReputation: "trMaxRep" })[field];
           flashEl($(focusId) || $("trDisplay"));
+          return;
+        }
+        if (view === "loadouts") {
+          flashEl($("loClass"));
           return;
         }
         if (view === "types") {
@@ -637,6 +654,7 @@
     if (state.view === "traders") return "traders:" + (state.selected.trader || "");
     if (state.view === "zones") return "zones:" + (state.selected.zone || "");
     if (state.view === "types") return "types:" + (state.selected.types || "");
+    if (state.view === "loadouts") return "loadouts:" + (state.selected.loadout || "");
     return state.view;
   }
 
@@ -646,6 +664,7 @@
       view: state.view,
       lists: tops(".editor .list"),
       wraps: tops(".editor .table-wrap"),
+      trees: tops(".loadout-tree"),
       inspectors: tops(".editor .inspector"),
       stage: ($("stage") && $("stage").scrollTop) || 0
     };
@@ -657,7 +676,23 @@
     });
   }
 
+  function showHudError(err) {
+    const stage = $("stage");
+    if (!stage) return;
+    const msg = (err && (err.stack || err.message)) || String(err);
+    stage.removeAttribute("data-ready");
+    stage.innerHTML = "<h1>HUD ERROR</h1><p class='lede'>" + escapeHtml(msg) + "</p>";
+  }
+
   function render() {
+    try {
+      renderUnsafe();
+    } catch (err) {
+      showHudError(err);
+    }
+  }
+
+  function renderUnsafe() {
     closeIconMenu();
     hideCtx();
     const saved = capturePaneScroll();
@@ -672,16 +707,19 @@
     else if (state.view === "traders") stage.innerHTML = renderTraders();
     else if (state.view === "zones") stage.innerHTML = renderZones();
     else if (state.view === "types") stage.innerHTML = renderTypesEditor();
+    else if (state.view === "loadouts") stage.innerHTML = renderLoadouts();
     else if (state.view === "backups") stage.innerHTML = renderBackups();
     bindView();
     syncUploadLabels();
     if (keepList) applyPaneScroll(".editor .list", saved.lists);
     if (keepContent) {
       applyPaneScroll(".editor .table-wrap", saved.wraps);
+      applyPaneScroll(".loadout-tree", saved.trees);
       applyPaneScroll(".editor .inspector", saved.inspectors);
       stage.scrollTop = saved.stage;
     }
     lastEditorKey = editorFileKey();
+    if (stage) stage.dataset.ready = "1";
   }
 
   function renderConnections() {
@@ -703,7 +741,8 @@
     `).join("");
     return `
       <h1>UPLINK</h1>
-      <p class="lede">Save credentials into Windows Credential Manager. Point each profile at Market, Traders, and TraderZones.</p>
+      <p class="lede">Save credentials into Windows Credential Manager. Point each profile at Market, Traders, TraderZones, and Loadouts.</p>
+      <div class="grid">${cards || "<p class='lede'>No profiles yet. Fill the form and save one to connect.</p>"}</div>
       <form class="form" id="profileForm">
         <div class="field"><label>PROFILE NAME</label><input name="name" value="${escapeHtml(p.name)}" required></div>
         <div class="field"><label>PROTOCOL</label>
@@ -724,6 +763,7 @@
         </div>
         <div class="field span"><label>TRADERS PATH</label><input name="tradersPath" value="${escapeHtml(p.tradersPath)}"></div>
         <div class="field span"><label>TRADERZONES PATH</label><input name="zonesPath" value="${escapeHtml(p.zonesPath)}"></div>
+        <div class="field span"><label>LOADOUTS PATH</label><input name="loadoutsPath" value="${escapeHtml(p.loadoutsPath)}"></div>
         <div class="field"><label>PASSIVE FTP</label>
           <select name="passive">
             <option value="true" ${p.passive ? "selected" : ""}>Yes</option>
@@ -733,12 +773,12 @@
         <div class="field"><label>&nbsp;</label>
           <div class="actions">
             <button class="btn" type="submit">Save profile</button>
+            <button class="btn" type="button" id="connectProfile"${p.id ? "" : " disabled"}>Connect</button>
             <button class="btn ghost" type="button" id="browseFolders">Browse folders</button>
             <button class="btn ghost" type="button" id="newProfile">New</button>
           </div>
         </div>
       </form>
-      <div class="grid">${cards || "<p class='lede'>No profiles yet.</p>"}</div>
     `;
   }
 
@@ -1235,6 +1275,384 @@
     toast("Applied bulk edit. Press Save then lint.");
   }
 
+  const LOADOUT_SLOTS = [
+    "Headgear", "Eyewear", "Mask", "Body", "Vest", "Gloves", "Legs", "Feet",
+    "Back", "Hips", "Armband", "Hands", "Shoulder", "Melee", "WalkieTalkie"
+  ];
+  const LOADOUT_BODIES = [
+    "SurvivorM_Mirek", "SurvivorM_Boris", "SurvivorM_Cyril", "SurvivorM_Denis", "SurvivorM_Elias",
+    "SurvivorM_Francis", "SurvivorM_Guo", "SurvivorM_Hassan", "SurvivorM_Indar", "SurvivorM_Jose",
+    "SurvivorM_Kaito", "SurvivorM_Lewis", "SurvivorM_Manua", "SurvivorM_Niki", "SurvivorM_Oliver",
+    "SurvivorM_Peter", "SurvivorM_Quinn", "SurvivorM_Rolf", "SurvivorM_Seth", "SurvivorM_Taiki",
+    "SurvivorF_Eva", "SurvivorF_Frida", "SurvivorF_Gabi", "SurvivorF_Helga", "SurvivorF_Irena",
+    "SurvivorF_Judy", "SurvivorF_Keiko", "SurvivorF_Linda", "SurvivorF_Maria", "SurvivorF_Naomi"
+  ];
+
+  function selectedLoadout() {
+    const files = (state.workspace && state.workspace.loadouts) || [];
+    return files.find((f) => f.filename === state.selected.loadout) || files[0] || null;
+  }
+
+  function defaultLoadoutNode(name) {
+    return {
+      className: name || "",
+      includeFile: "",
+      chance: 1,
+      quantityMin: 0,
+      quantityMax: 0,
+      health: [{ min: 1, max: 1, zone: "" }],
+      attachments: [],
+      cargo: [],
+      sets: [],
+      constructionParts: []
+    };
+  }
+
+  function ensureLoadoutRoot(file) {
+    if (!file.root) file.root = defaultLoadoutNode("SurvivorM_Mirek");
+    if (!file.root.attachments) file.root.attachments = [];
+    if (!file.root.cargo) file.root.cargo = [];
+    if (!file.root.sets) file.root.sets = [];
+    if (!file.root.health || !file.root.health.length) file.root.health = [{ min: 1, max: 1, zone: "" }];
+    return file.root;
+  }
+
+  function getLoadoutNode(root, path) {
+    let node = root;
+    for (const step of path || []) {
+      if (!node || !step) return null;
+      if (step.k === "att") {
+        const slot = (node.attachments || [])[step.i];
+        node = slot && (slot.items || [])[step.j];
+      } else if (step.k === "cargo") node = (node.cargo || [])[step.i];
+      else if (step.k === "set") node = (node.sets || [])[step.i];
+      else return null;
+    }
+    return node || null;
+  }
+
+  function pathKey(path) {
+    return JSON.stringify(path || []);
+  }
+
+  function currentLoadoutSlot() {
+    const file = selectedLoadout();
+    const path = state.loadoutPath || [];
+    if (!file || !path.length) return null;
+    const last = path[path.length - 1];
+    if (last.k !== "att") return null;
+    const parent = getLoadoutNode(ensureLoadoutRoot(file), path.slice(0, -1));
+    return parent && parent.attachments ? parent.attachments[last.i] || null : null;
+  }
+
+  function classNamesInLoadout(node, out = new Set()) {
+    if (!node) return out;
+    if (node.className) out.add(String(node.className).toLowerCase());
+    (node.attachments || []).forEach((slot) => (slot.items || []).forEach((item) => classNamesInLoadout(item, out)));
+    (node.cargo || []).forEach((item) => classNamesInLoadout(item, out));
+    (node.sets || []).forEach((item) => classNamesInLoadout(item, out));
+    return out;
+  }
+
+  function loadoutIncludeList() {
+    const self = selectedLoadout();
+    return ((state.workspace && state.workspace.loadouts) || [])
+      .filter((f) => !self || f.filename !== self.filename)
+      .map((f) => `<option value="${escapeHtml(f.filename)}"></option>`)
+      .join("");
+  }
+
+  function renderLoadoutTree(root, path, depth) {
+    const node = getLoadoutNode(root, path);
+    if (!node) return "";
+    const active = pathKey(path) === pathKey(state.loadoutPath);
+    const label = node.className || node.includeFile || (path.length ? "Set" : "Character");
+    const meta = [
+      node.includeFile ? "include " + node.includeFile : "",
+      Number(node.chance) !== 1 ? (Math.round(Number(node.chance) * 100) + "%") : "",
+      (Number(node.quantityMax) > 0 ? ("qty " + node.quantityMin + "-" + node.quantityMax) : "")
+    ].filter(Boolean).join(" · ");
+    let html = `<button type="button" class="loadout-node ${active ? "active" : ""}" data-lo-path='${escapeHtml(pathKey(path))}' style="padding-left:${10 + depth * 14}px">
+      ${escapeHtml(label)}
+      <small>${escapeHtml(meta || (path.length ? "item" : "root character"))}</small>
+    </button>`;
+    (node.attachments || []).forEach((slot, i) => {
+      html += `<div class="loadout-group" style="padding-left:${24 + depth * 14}px">SLOT ${escapeHtml(slot.slotName || "(unspecified)")}</div>`;
+      (slot.items || []).forEach((_, j) => {
+        html += renderLoadoutTree(root, path.concat([{ k: "att", i, j }]), depth + 1);
+      });
+    });
+    if ((node.cargo || []).length) {
+      html += `<div class="loadout-group" style="padding-left:${24 + depth * 14}px">CARGO</div>`;
+      node.cargo.forEach((_, i) => {
+        html += renderLoadoutTree(root, path.concat([{ k: "cargo", i }]), depth + 1);
+      });
+    }
+    if ((node.sets || []).length) {
+      html += `<div class="loadout-group" style="padding-left:${24 + depth * 14}px">SETS (one of these can roll)</div>`;
+      node.sets.forEach((_, i) => {
+        html += renderLoadoutTree(root, path.concat([{ k: "set", i }]), depth + 1);
+      });
+    }
+    return html;
+  }
+
+  function renderLoadouts() {
+    const files = (state.workspace && state.workspace.loadouts) || [];
+    const file = selectedLoadout();
+    if (file && !state.selected.loadout) state.selected.loadout = file.filename;
+    const root = file ? ensureLoadoutRoot(file) : null;
+    const node = root ? getLoadoutNode(root, state.loadoutPath) : null;
+    return `
+      <div class="editor">
+        <section class="pane">
+          <div class="pane-head"><strong>LOADOUTS</strong>
+            <div class="head-actions">${sortFilesBtn()}<button class="icon-btn" id="addFile">NEW</button></div></div>
+          <div class="list">${fileList(files, state.selected.loadout, "Loadouts") || "<p class='lede' style='padding:12px'>Set the Loadouts path on LINK and connect. Typical folder: ExpansionMod/Loadouts.</p>"}</div>
+        </section>
+        <section class="pane">
+          <div class="toolbar">
+            <button class="btn ghost" id="loAddTypes">Add from types</button>
+            <button class="btn ghost" id="loAddSlot">Add slot</button>
+            <button class="btn ghost" id="loAddCargo">Add cargo</button>
+            <button class="btn ghost" id="loAddSet">Add set</button>
+            <button class="btn" id="saveFile">Save + lint</button>
+            <button class="btn danger" id="deleteFile">Delete file</button>
+          </div>
+          <p class="types-meta">Expansion loadout: ClassName, Chance 0–1, Quantity, Health, slotted attachments, cargo, and chance Sets. Nested items follow the same rules.</p>
+          <div class="loadout-tree">${root ? renderLoadoutTree(root, [], 0) : "<p class='lede' style='padding:12px'>No loadout file selected.</p>"}</div>
+        </section>
+        <section class="pane inspector" id="inspector">
+          ${node ? renderLoadoutInspector(node, !state.loadoutPath.length) : "<p class='lede'>Select a loadout file.</p>"}
+        </section>
+      </div>
+    `;
+  }
+
+  function renderLoadoutInspector(node, isRoot) {
+    const healthRows = (node.health && node.health.length) ? node.health : [{ min: 1, max: 1, zone: "" }];
+    const bodyOpts = LOADOUT_BODIES.map((n) =>
+      `<option value="${escapeHtml(n)}" ${n === node.className ? "selected" : ""}>${escapeHtml(n)}</option>`
+    ).join("");
+    const slot = currentLoadoutSlot();
+    const slotOpts = LOADOUT_SLOTS.map((s) => `<option value="${escapeHtml(s)}"></option>`).join("");
+    return `
+      <div class="field"><label>${isRoot ? "CHARACTER / ROOT CLASSNAME" : "CLASSNAME"}</label>
+        ${isRoot ? `<select id="loBody"><option value="">Custom…</option>${bodyOpts}</select>` : ""}
+        <input id="loClass" value="${escapeHtml(node.className || "")}" placeholder="${isRoot ? "SurvivorM_Mirek" : "AKM"}">
+      </div>
+      ${slot ? `<div class="field"><label>ATTACHMENT SLOT</label>
+        <input id="loSlot" list="loSlotList" value="${escapeHtml(slot.slotName || "")}" placeholder="Body">
+        <datalist id="loSlotList">${slotOpts}</datalist>
+      </div>` : ""}
+      <div class="field"><label>INCLUDE OTHER LOADOUT FILE</label>
+        <input id="loInclude" list="loIncludeList" value="${escapeHtml(node.includeFile || "")}" placeholder="PoliceLoadout.json">
+        <datalist id="loIncludeList">${loadoutIncludeList()}</datalist>
+      </div>
+      <div class="field"><label>CHANCE (0–1)</label>
+        <div class="lo-inline">
+          <input id="loChance" type="number" step="0.05" min="0" max="1" value="${node.chance}">
+          <input id="loChanceRange" type="range" min="0" max="1" step="0.05" value="${node.chance}">
+        </div>
+      </div>
+      <div class="field"><label>QUANTITY MIN</label><input id="loQmin" type="number" step="0.1" value="${node.quantityMin}"></div>
+      <div class="field"><label>QUANTITY MAX</label><input id="loQmax" type="number" step="0.1" value="${node.quantityMax}"></div>
+      <div class="field"><label>HEALTH ZONES</label>
+        ${healthRows.map((h, i) => `
+          <div class="lo-health" data-lo-health="${i}">
+            <input data-lo-h="min" type="number" step="0.05" min="0" max="1" value="${h.min}" title="Min">
+            <input data-lo-h="max" type="number" step="0.05" min="0" max="1" value="${h.max}" title="Max">
+            <input data-lo-h="zone" value="${escapeHtml(h.zone || "")}" placeholder="Zone (empty = whole item)">
+            <button type="button" class="icon-btn" data-lo-h-del="${i}">−</button>
+          </div>
+        `).join("")}
+        <button type="button" class="btn ghost" id="loHadd">Add zone</button>
+      </div>
+      <p class="lede">Quantity 0/0 means a single item (clothing, weapons). Use min/max for stacks like ammo. Sets are rolled by Chance — Expansion picks among siblings. Include pulls another file from this Loadouts folder.</p>
+      <button class="btn danger" id="loRemove">${isRoot ? "Clear children" : "Remove this entry"}</button>
+    `;
+  }
+
+  function collectLoadout() {
+    const file = selectedLoadout();
+    if (!file) return null;
+    const root = ensureLoadoutRoot(file);
+    const node = getLoadoutNode(root, state.loadoutPath);
+    if (!node || !$("loClass")) return file;
+    node.className = $("loClass").value;
+    node.includeFile = ($("loInclude") && $("loInclude").value) || "";
+    node.chance = Number($("loChance").value);
+    node.quantityMin = Number($("loQmin").value);
+    node.quantityMax = Number($("loQmax").value);
+    const slot = currentLoadoutSlot();
+    if (slot && $("loSlot")) slot.slotName = $("loSlot").value;
+    node.health = [...document.querySelectorAll("[data-lo-health]")].map((row) => ({
+      min: Number((row.querySelector('[data-lo-h="min"]') || {}).value),
+      max: Number((row.querySelector('[data-lo-h="max"]') || {}).value),
+      zone: ((row.querySelector('[data-lo-h="zone"]') || {}).value) || ""
+    }));
+    if (!node.health.length) node.health = [{ min: 1, max: 1, zone: "" }];
+    return file;
+  }
+
+  function fillLoadoutDest() {
+    const sel = $("loadoutDestSlot");
+    if (!sel) return;
+    const file = selectedLoadout();
+    const root = file ? ensureLoadoutRoot(file) : defaultLoadoutNode();
+    const node = getLoadoutNode(root, state.loadoutPath) || root;
+    const used = (node.attachments || []).map((s) => s.slotName);
+    const opts = LOADOUT_SLOTS.map((slot) =>
+      `<option value="${escapeHtml(slot)}">${slot}${used.includes(slot) ? " (exists)" : ""}</option>`
+    );
+    sel.innerHTML = opts.join("");
+    const firstMissing = LOADOUT_SLOTS.find((s) => !used.includes(s));
+    if (firstMissing) sel.value = firstMissing;
+  }
+
+  function addLoadoutSlot() {
+    collectLoadout();
+    const file = selectedLoadout();
+    if (!file) return;
+    const node = getLoadoutNode(ensureLoadoutRoot(file), state.loadoutPath);
+    if (!node) return;
+    const used = (node.attachments || []).map((s) => s.slotName);
+    const next = LOADOUT_SLOTS.find((s) => !used.includes(s)) || "Body";
+    const name = prompt("Attachment slot name (Body, Legs, Back, Hands…)", next);
+    if (!name) return;
+    node.attachments = node.attachments || [];
+    let slot = node.attachments.find((s) => s.slotName.toLowerCase() === name.toLowerCase());
+    if (!slot) {
+      slot = { slotName: name, items: [] };
+      node.attachments.push(slot);
+    }
+    render();
+    toast("Slot " + name + " ready. Add items from types.");
+  }
+
+  function addLoadoutChild(kind) {
+    collectLoadout();
+    const file = selectedLoadout();
+    if (!file) return;
+    const node = getLoadoutNode(ensureLoadoutRoot(file), state.loadoutPath);
+    if (!node) return;
+    if (kind === "set") {
+      node.sets = node.sets || [];
+      node.sets.push(defaultLoadoutNode(""));
+      state.loadoutPath = (state.loadoutPath || []).concat([{ k: "set", i: node.sets.length - 1 }]);
+    } else {
+      node.cargo = node.cargo || [];
+      node.cargo.push(defaultLoadoutNode("BandageDressing"));
+      state.loadoutPath = (state.loadoutPath || []).concat([{ k: "cargo", i: node.cargo.length - 1 }]);
+    }
+    render();
+  }
+
+  function addLoadoutNodes(nodes) {
+    collectLoadout();
+    const file = selectedLoadout();
+    if (!file || !nodes.length) return 0;
+    const dest = document.querySelector("input[name='loadoutDest']:checked");
+    const kind = dest ? dest.value : "slot";
+    const parent = getLoadoutNode(ensureLoadoutRoot(file), state.loadoutPath) || file.root;
+    if (kind === "cargo") {
+      parent.cargo = parent.cargo || [];
+      nodes.forEach((n) => parent.cargo.push(n));
+      return nodes.length;
+    }
+    if (kind === "set") {
+      parent.sets = parent.sets || [];
+      const set = defaultLoadoutNode("");
+      set.chance = 1;
+      set.cargo = nodes;
+      parent.sets.push(set);
+      return nodes.length;
+    }
+    const slotName = ($("loadoutDestSlot") && $("loadoutDestSlot").value) || "Body";
+    parent.attachments = parent.attachments || [];
+    let slot = parent.attachments.find((s) => s.slotName.toLowerCase() === slotName.toLowerCase());
+    if (!slot) {
+      slot = { slotName, items: [] };
+      parent.attachments.push(slot);
+    }
+    nodes.forEach((n) => slot.items.push(n));
+    return nodes.length;
+  }
+
+  function addTypesToLoadout() {
+    const file = selectedLoadout();
+    if (!file) {
+      toast("Select a loadout file first.", true);
+      return;
+    }
+    const names = [...state.types.selected];
+    if (!names.length) {
+      toast("Select at least one type.", true);
+      return;
+    }
+    const byKey = new Map((state.types.types || []).map((t) => [String(t.name).toLowerCase(), t]));
+    const nodes = names.map((key) => {
+      const entry = byKey.get(key);
+      return defaultLoadoutNode(entry ? entry.name : key);
+    });
+    const added = addLoadoutNodes(nodes);
+    closeTypesWizard();
+    render();
+    toast("Added " + added + " type(s) to " + file.filename + ". Press Save then lint.");
+  }
+
+  function duplicateLoadoutNode() {
+    collectLoadout();
+    const file = selectedLoadout();
+    const path = state.loadoutPath || [];
+    if (!file || !path.length) {
+      toast("Select an item in the tree to duplicate.", true);
+      return;
+    }
+    const node = getLoadoutNode(ensureLoadoutRoot(file), path);
+    const parent = getLoadoutNode(file.root, path.slice(0, -1));
+    const last = path[path.length - 1];
+    if (!node || !parent || !last) return;
+    const copy = JSON.parse(JSON.stringify(node));
+    if (last.k === "att") {
+      const slot = parent.attachments[last.i];
+      if (!slot) return;
+      slot.items.splice(last.j + 1, 0, copy);
+      state.loadoutPath = path.slice(0, -1).concat([{ k: "att", i: last.i, j: last.j + 1 }]);
+    } else if (last.k === "cargo") {
+      parent.cargo.splice(last.i + 1, 0, copy);
+      state.loadoutPath = path.slice(0, -1).concat([{ k: "cargo", i: last.i + 1 }]);
+    } else if (last.k === "set") {
+      parent.sets.splice(last.i + 1, 0, copy);
+      state.loadoutPath = path.slice(0, -1).concat([{ k: "set", i: last.i + 1 }]);
+    }
+    render();
+  }
+
+  function removeLoadoutNode() {
+    collectLoadout();
+    const file = selectedLoadout();
+    if (!file) return;
+    const path = state.loadoutPath || [];
+    if (!path.length) {
+      file.root = defaultLoadoutNode("SurvivorM_Mirek");
+      render();
+      toast("Cleared loadout children.");
+      return;
+    }
+    const parent = getLoadoutNode(file.root, path.slice(0, -1));
+    const last = path[path.length - 1];
+    if (!parent || !last) return;
+    if (last.k === "att") {
+      const slot = parent.attachments[last.i];
+      if (slot) slot.items.splice(last.j, 1);
+      if (slot && !slot.items.length) parent.attachments.splice(last.i, 1);
+    } else if (last.k === "cargo") parent.cargo.splice(last.i, 1);
+    else if (last.k === "set") parent.sets.splice(last.i, 1);
+    state.loadoutPath = path.slice(0, -1);
+    render();
+  }
+
   function renderTraders() {
     const files = (state.workspace && state.workspace.traders) || [];
     const file = selectedTrader();
@@ -1374,7 +1792,8 @@
       passive: data.get("passive") === "true",
       marketPath: data.get("marketPath"),
       tradersPath: data.get("tradersPath"),
-      zonesPath: data.get("zonesPath")
+      zonesPath: data.get("zonesPath"),
+      loadoutsPath: data.get("loadoutsPath")
     };
     return { profile, password: String(data.get("password") || "") };
   }
@@ -1424,11 +1843,13 @@
     if (state.view === "traders" && $("trDisplay")) collectTrader();
     if (state.view === "zones" && $("znName")) collectZone();
     if (state.view === "types" && $("tyName")) collectTypes();
+    if (state.view === "loadouts" && $("loClass")) collectLoadout();
   }
 
   function hideCtx() {
-    $("ctx").classList.add("hidden");
+    if ($("ctx")) $("ctx").classList.add("hidden");
     if ($("ctxTypes")) $("ctxTypes").classList.add("hidden");
+    if ($("ctxLoadout")) $("ctxLoadout").classList.add("hidden");
   }
 
   function selectedItemIndices() {
@@ -1735,12 +2156,14 @@
       const file = state.view === "market" ? selectedMarket()
         : state.view === "traders" ? selectedTrader()
         : state.view === "zones" ? selectedZone()
-        : state.view === "types" ? selectedTypesFile() : null;
-      if (file && (state.view === "market" || state.view === "traders" || state.view === "zones" || state.view === "types")) {
+        : state.view === "types" ? selectedTypesFile()
+        : state.view === "loadouts" ? selectedLoadout() : null;
+      if (file && (state.view === "market" || state.view === "traders" || state.view === "zones" || state.view === "types" || state.view === "loadouts")) {
         showProgress("Saving current file…", 20);
         const kind = state.view === "traders" ? "Traders"
           : state.view === "zones" ? "TraderZones"
-          : state.view === "types" ? "Types" : "Market";
+          : state.view === "types" ? "Types"
+          : state.view === "loadouts" ? "Loadouts" : "Market";
         const snapshot = JSON.parse(JSON.stringify(file));
         const ws = await api("saveFile", { kind, file: snapshot });
         const lint = await api("validateAll");
@@ -1798,6 +2221,7 @@
       if (state.view === "traders") { kind = "Traders"; file = collectTrader(); }
       if (state.view === "zones") { kind = "TraderZones"; file = collectZone(); }
       if (state.view === "types") { kind = "Types"; file = collectTypes(); }
+      if (state.view === "loadouts") { kind = "Loadouts"; file = collectLoadout(); }
       if (!file) return;
       const snapshot = JSON.parse(JSON.stringify(file));
       showProgress("Saving locally…", 20);
@@ -1826,6 +2250,7 @@
     $("pickMarket").textContent = state.browser.picks.market || "not set";
     $("pickTraders").textContent = state.browser.picks.traders || "not set";
     $("pickZones").textContent = state.browser.picks.zones || "not set";
+    if ($("pickLoadouts")) $("pickLoadouts").textContent = state.browser.picks.loadouts || "not set";
   }
 
   function renderBrowserList() {
@@ -1843,7 +2268,7 @@
     list.innerHTML = rows || "<p class='lede' style='padding:12px'>This folder is empty.</p>";
     $("browserHint").textContent = state.browser.jsonCount
       ? state.browser.jsonCount + " JSON file(s) in this folder. If these are trader files, assign the folder below."
-      : "Open folders until you see the JSON files, then mark Market / Traders / TraderZones.";
+      : "Open folders until you see the JSON files, then mark Market / Traders / TraderZones / Loadouts.";
     list.querySelectorAll("[data-remote]").forEach((btn) => {
       btn.addEventListener("click", async () => {
         const entry = state.browser.entries.find((e) => e.path === btn.dataset.remote);
@@ -1876,6 +2301,7 @@
       if (data.suggestions.market && !state.browser.picks.market) state.browser.picks.market = data.suggestions.market;
       if (data.suggestions.traders && !state.browser.picks.traders) state.browser.picks.traders = data.suggestions.traders;
       if (data.suggestions.zones && !state.browser.picks.zones) state.browser.picks.zones = data.suggestions.zones;
+      if (data.suggestions.loadouts && !state.browser.picks.loadouts) state.browser.picks.loadouts = data.suggestions.loadouts;
     }
     renderBrowserList();
   }
@@ -1904,7 +2330,7 @@
 
   async function applyBrowserPaths() {
     const picks = state.browser.picks;
-    if (!picks.market && !picks.traders && !picks.zones) {
+    if (!picks.market && !picks.traders && !picks.zones && !picks.loadouts) {
       toast("Pick at least one folder first", true);
       return;
     }
@@ -1912,6 +2338,7 @@
     state.form.marketPath = picks.market || state.form.marketPath;
     state.form.tradersPath = picks.traders || state.form.tradersPath;
     state.form.zonesPath = picks.zones || state.form.zonesPath;
+    state.form.loadoutsPath = picks.loadouts || state.form.loadoutsPath;
     try {
       const data = await api("saveProfile", { profile: state.form, password: state.browser.password });
       state.profiles = data.profiles || [];
@@ -1925,9 +2352,41 @@
     render();
   }
 
+  async function connectById(id) {
+    if (!id) {
+      toast("Save the profile first.", true);
+      return;
+    }
+    try {
+      showProgress("Pulling remote files…", 10);
+      setStatus("LINKING", true);
+      const ws = await api("connect", { id });
+      hideProgress();
+      applyWorkspace(ws);
+      const parsed = workspaceFileCount(ws);
+      if (!parsed) {
+        setStatus("ONLINE", true);
+        setTicker("Connected, but no valid Expansion files were found. Select the correct folders.");
+        const profile = state.profiles.find((p) => p.id === id);
+        render();
+        if (profile) await openBrowser(profile, "");
+        return;
+      }
+      state.view = "market";
+      setStatus("ONLINE", true);
+      setTicker("Local workspace synced. Save + lint files as you go, then Upload when ready.");
+      render();
+    } catch (err) {
+      hideProgress();
+      setStatus("STANDBY", false);
+      toast(err.message, true);
+    }
+  }
+
   function bindView() {
     if (state.view === "connections") {
       const form = $("profileForm");
+      if (!form) return;
       form.addEventListener("submit", async (ev) => {
         ev.preventDefault();
         try {
@@ -1939,8 +2398,8 @@
           render();
         } catch (err) { toast(err.message, true); }
       });
-      $("newProfile").addEventListener("click", () => { state.form = emptyProfile(); render(); });
-      $("browseFolders").addEventListener("click", async () => {
+      if ($("newProfile")) $("newProfile").addEventListener("click", () => { state.form = emptyProfile(); render(); });
+      if ($("browseFolders")) $("browseFolders").addEventListener("click", async () => {
         const creds = browserCredsFromForm();
         state.form = { ...state.form, ...creds.profile, password: creds.password };
         await openBrowser(creds.profile, creds.password);
@@ -1967,32 +2426,17 @@
           toast("Connection OK");
         } catch (err) { hideProgress(); toast(err.message, true); }
       }));
-      document.querySelectorAll("[data-connect]").forEach((btn) => btn.addEventListener("click", async () => {
-        try {
-          showProgress("Pulling remote files…", 10);
-          setStatus("LINKING", true);
-          const ws = await api("connect", { id: btn.dataset.connect });
-          hideProgress();
-          applyWorkspace(ws);
-          const parsed = ((ws.markets || []).length + (ws.traders || []).length + (ws.zones || []).length);
-          if (!parsed) {
-            setStatus("ONLINE", true);
-            setTicker("Connected, but no valid Expansion files were found. Select the correct folders.");
-            const profile = state.profiles.find((p) => p.id === btn.dataset.connect);
-            render();
-            if (profile) await openBrowser(profile, "");
-            return;
-          }
-          state.view = "market";
-          setStatus("ONLINE", true);
-          setTicker("Local workspace synced. Save + lint files as you go, then Upload when ready.");
-          render();
-        } catch (err) {
-          hideProgress();
-          setStatus("STANDBY", false);
-          toast(err.message, true);
+      document.querySelectorAll("[data-connect]").forEach((btn) => {
+        btn.addEventListener("click", () => connectById(btn.dataset.connect));
+      });
+      const connectForm = $("connectProfile");
+      if (connectForm) connectForm.addEventListener("click", () => {
+        if (!state.form.id) {
+          toast("Save the profile first.", true);
+          return;
         }
-      }));
+        connectById(state.form.id);
+      });
     }
 
     document.querySelectorAll("[data-open]").forEach((btn) => btn.addEventListener("click", () => {
@@ -2001,6 +2445,10 @@
       if (btn.dataset.kind === "Traders") state.selected.trader = btn.dataset.open;
       if (btn.dataset.kind === "TraderZones") state.selected.zone = btn.dataset.open;
       if (btn.dataset.kind === "Types") state.selected.types = btn.dataset.open;
+      if (btn.dataset.kind === "Loadouts") {
+        state.selected.loadout = btn.dataset.open;
+        state.loadoutPath = [];
+      }
       state.selected.item = 0;
       state.selectedItems = new Set();
       state.selected.typeItem = 0;
@@ -2095,20 +2543,26 @@
     const addFile = $("addFile");
     if (addFile) addFile.addEventListener("click", async () => {
       const typesMode = state.view === "types";
+      const loadoutMode = state.view === "loadouts";
       const name = prompt(
         typesMode ? "New types path relative to the mission (e.g. CustomTypes/MyMod_types.xml)" : "New filename (without path)",
-        typesMode ? "CustomTypes/New_types.xml" : "New_Category"
+        typesMode ? "CustomTypes/New_types.xml" : loadoutMode ? "HumanLoadout" : "New_Category"
       );
       if (!name) return;
       const kind = state.view === "traders" ? "Traders"
         : state.view === "zones" ? "TraderZones"
-        : typesMode ? "Types" : "Market";
+        : typesMode ? "Types"
+        : loadoutMode ? "Loadouts" : "Market";
       try {
         const ws = await api("createFile", { kind, filename: name });
         applyWorkspace(ws);
         if (kind === "Market") state.selected.market = JsonName(name);
         if (kind === "Traders") state.selected.trader = JsonName(name);
         if (kind === "TraderZones") state.selected.zone = JsonName(name);
+        if (kind === "Loadouts") {
+          state.selected.loadout = (ws.created && ws.created.filename) || JsonName(name);
+          state.loadoutPath = [];
+        }
         if (kind === "Types") {
           state.selected.types = (ws.created && ws.created.filename) || TypesName(name);
           state.selected.typeItem = 0;
@@ -2122,6 +2576,7 @@
       const file = state.view === "traders" ? selectedTrader()
         : state.view === "zones" ? selectedZone()
         : state.view === "types" ? selectedTypesFile()
+        : state.view === "loadouts" ? selectedLoadout()
         : selectedMarket();
       if (!file) return;
       const vanilla = state.view === "types" && String(file.filename || "").toLowerCase() === "db/types.xml";
@@ -2133,7 +2588,8 @@
       )) return;
       const kind = state.view === "traders" ? "Traders"
         : state.view === "zones" ? "TraderZones"
-        : state.view === "types" ? "Types" : "Market";
+        : state.view === "types" ? "Types"
+        : state.view === "loadouts" ? "Loadouts" : "Market";
       const ws = await api("deleteFile", { kind, filename: file.filename });
       applyWorkspace(ws);
     });
@@ -2267,6 +2723,57 @@
       const el = $(id);
       if (el) el.addEventListener("input", syncTypesEntryRow);
     });
+    const addFromTypes = $("loAddTypes");
+    if (addFromTypes) addFromTypes.addEventListener("click", () => openTypesWizard("loadout"));
+    const addSlot = $("loAddSlot");
+    if (addSlot) addSlot.addEventListener("click", addLoadoutSlot);
+    const addCargo = $("loAddCargo");
+    if (addCargo) addCargo.addEventListener("click", () => addLoadoutChild("cargo"));
+    const addSet = $("loAddSet");
+    if (addSet) addSet.addEventListener("click", () => addLoadoutChild("set"));
+    const removeLo = $("loRemove");
+    if (removeLo) removeLo.addEventListener("click", removeLoadoutNode);
+    const loBody = $("loBody");
+    if (loBody) loBody.addEventListener("change", () => {
+      if (loBody.value && $("loClass")) $("loClass").value = loBody.value;
+    });
+    const loChance = $("loChance");
+    const loChanceRange = $("loChanceRange");
+    if (loChance && loChanceRange) {
+      loChance.addEventListener("input", () => { loChanceRange.value = loChance.value; });
+      loChanceRange.addEventListener("input", () => { loChance.value = loChanceRange.value; });
+    }
+    const addHealth = $("loHadd");
+    if (addHealth) addHealth.addEventListener("click", () => {
+      const file = collectLoadout();
+      const node = file && getLoadoutNode(ensureLoadoutRoot(file), state.loadoutPath);
+      if (!node) return;
+      node.health = node.health || [];
+      node.health.push({ min: 1, max: 1, zone: "" });
+      render();
+    });
+    document.querySelectorAll("[data-lo-h-del]").forEach((btn) => btn.addEventListener("click", () => {
+      const file = collectLoadout();
+      const node = file && getLoadoutNode(ensureLoadoutRoot(file), state.loadoutPath);
+      if (!node) return;
+      node.health.splice(Number(btn.dataset.loHDel), 1);
+      if (!node.health.length) node.health = [{ min: 1, max: 1, zone: "" }];
+      render();
+    }));
+    document.querySelectorAll("[data-lo-path]").forEach((btn) => btn.addEventListener("click", () => {
+      flushOpenEditors();
+      try { state.loadoutPath = JSON.parse(btn.dataset.loPath || "[]"); } catch { state.loadoutPath = []; }
+      render();
+    }));
+    document.querySelectorAll("[data-lo-path]").forEach((btn) => btn.addEventListener("contextmenu", (ev) => {
+      ev.preventDefault();
+      flushOpenEditors();
+      try { state.loadoutPath = JSON.parse(btn.dataset.loPath || "[]"); } catch { state.loadoutPath = []; }
+      const menu = $("ctxLoadout");
+      menu.classList.remove("hidden");
+      menu.style.left = Math.min(ev.clientX, window.innerWidth - 240) + "px";
+      menu.style.top = Math.min(ev.clientY, window.innerHeight - 90) + "px";
+    }));
   }
 
   function applyTypesCatalog(data) {
@@ -2320,16 +2827,24 @@
   }
 
   function setWizardChrome() {
-    const listMode = wizardMode() !== "items";
+    const listMode = wizardMode() !== "items" && wizardMode() !== "loadout";
+    const loadoutMode = wizardMode() === "loadout";
     $("typesTitle").textContent = wizardMode() === "attachments"
       ? "EDIT ATTACHMENTS"
-      : wizardMode() === "variants" ? "EDIT VARIANTS" : "ADD FROM TYPES";
-    $("typesDestBox").classList.toggle("hidden", listMode);
+      : wizardMode() === "variants" ? "EDIT VARIANTS"
+      : loadoutMode ? "ADD TO LOADOUT" : "ADD FROM TYPES";
+    $("typesDestBox").classList.toggle("hidden", listMode || loadoutMode);
+    if ($("loadoutDestBox")) $("loadoutDestBox").classList.toggle("hidden", !loadoutMode);
     $("typesAddBlank").classList.toggle("hidden", listMode);
     $("typesHideUsedWrap").classList.toggle("hidden", listMode);
     $("typesAdd").textContent = listMode ? "Apply selected" : "Add selected";
     const help = $("typesAttachHint");
     if (help) help.classList.toggle("hidden", wizardMode() !== "attachments");
+    if (loadoutMode) fillLoadoutDest();
+    const hideLabel = $("typesHideUsedLabel");
+    if (hideLabel) {
+      hideLabel.textContent = loadoutMode ? "Hide already in this loadout" : "Hide already in market or variants";
+    }
   }
 
   function attachCount(key) {
@@ -2357,10 +2872,14 @@
 
   function filteredTypes() {
     const used = usedClassNames();
-    const hide = wizardMode() === "items" && ($("typesHideUsed") ? $("typesHideUsed").checked : state.types.hideUsed);
+    const loadoutUsed = wizardMode() === "loadout"
+      ? classNamesInLoadout(selectedLoadout() && selectedLoadout().root)
+      : new Set();
+    const hideOn = $("typesHideUsed") ? $("typesHideUsed").checked : state.types.hideUsed;
     return (state.types.types || []).filter((entry) => {
       const key = String(entry.name || "").toLowerCase();
-      if (hide && used.has(key)) return false;
+      if (hideOn && wizardMode() === "items" && used.has(key)) return false;
+      if (hideOn && wizardMode() === "loadout" && loadoutUsed.has(key)) return false;
       return matchTypesQuery([entry.name, entry.category, entry.file].filter(Boolean).join(" "), state.types.filter);
     });
   }
@@ -2613,6 +3132,13 @@
   }
 
   function addBlankMarketItem() {
+    if (wizardMode() === "loadout") {
+      addLoadoutNodes([defaultLoadoutNode("NewItem")]);
+      closeTypesWizard();
+      render();
+      toast("Added a blank loadout entry. Press Save then lint.");
+      return;
+    }
     const file = selectedMarket();
     if (!file) return;
     file.items.push(defaultMarketItem("NewItem", file.items[file.items.length - 1]));
@@ -2622,6 +3148,10 @@
   }
 
   async function addSelectedTypes() {
+    if (wizardMode() === "loadout") {
+      addTypesToLoadout();
+      return;
+    }
     if (wizardMode() !== "items") {
       applyListSelection();
       return;
@@ -2695,6 +3225,12 @@
     return cleaned;
   }
 
+  function on(id, ev, fn) {
+    const el = $(id);
+    if (el) el.addEventListener(ev, fn);
+    return el;
+  }
+
   document.querySelectorAll(".rail-btn[data-view]").forEach((btn) => {
     btn.addEventListener("click", async () => {
       if (btn.disabled) return;
@@ -2706,23 +3242,23 @@
       render();
     });
   });
-  $("uploadBtn").addEventListener("click", requestUpload);
-  $("validateBtn").addEventListener("click", async () => {
+  on("uploadBtn", "click", requestUpload);
+  on("validateBtn", "click", async () => {
     try {
       const data = await api("validateAll");
       if (state.workspace) state.workspace.issues = data.issues || [];
       openDrawer(data.issues || []);
     } catch (err) { toast(err.message, true); }
   });
-  $("drawerClose").addEventListener("click", () => $("drawer").classList.remove("open"));
-  $("ctx").addEventListener("click", (ev) => {
+  on("drawerClose", "click", () => $("drawer").classList.remove("open"));
+  on("ctx", "click", (ev) => {
     const action = ev.target && ev.target.dataset ? ev.target.dataset.ctx : "";
     if (action === "variant") openVariantParentPicker();
     if (action === "delete") deleteSelectedMarketItems();
     if (action === "infinite") setInfiniteStock();
     if (action === "dupes") removeDuplicateClassnames();
   });
-  $("ctxTypes").addEventListener("click", (ev) => {
+  on("ctxTypes", "click", (ev) => {
     const action = ev.target && ev.target.dataset ? ev.target.dataset.ctxType : "";
     hideCtx();
     if (action === "dup") duplicateSelectedTypes();
@@ -2730,26 +3266,37 @@
     if (action === "copy") copySelectedTypeNames();
     if (action === "delete") deleteSelectedTypes();
   });
-  $("addMissingCancel").addEventListener("click", closeAddMissing);
-  $("addMissingOk").addEventListener("click", confirmAddMissing);
-  $("variantPickCancel").addEventListener("click", closeVariantPick);
-  $("variantPickFilter").addEventListener("input", renderVariantPickList);
-  document.addEventListener("click", (ev) => {
-    if (!$("ctx").contains(ev.target) && !($("ctxTypes") && $("ctxTypes").contains(ev.target))) hideCtx();
+  on("ctxLoadout", "click", (ev) => {
+    const action = ev.target && ev.target.dataset ? ev.target.dataset.ctxLo : "";
+    hideCtx();
+    if (action === "add-types") openTypesWizard("loadout");
+    if (action === "add-slot") addLoadoutSlot();
+    if (action === "add-cargo") addLoadoutChild("cargo");
+    if (action === "add-set") addLoadoutChild("set");
+    if (action === "dup") duplicateLoadoutNode();
+    if (action === "delete") removeLoadoutNode();
   });
-  $("typesPickFolder").addEventListener("click", importTypesFolder);
-  $("typesCancel").addEventListener("click", closeTypesWizard);
-  $("typesAdd").addEventListener("click", () => addSelectedTypes());
-  $("typesAddBlank").addEventListener("click", addBlankMarketItem);
-  $("typesFilter").addEventListener("input", (ev) => {
+  on("addMissingCancel", "click", closeAddMissing);
+  on("addMissingOk", "click", confirmAddMissing);
+  on("variantPickCancel", "click", closeVariantPick);
+  on("variantPickFilter", "input", renderVariantPickList);
+  document.addEventListener("click", (ev) => {
+    if (!$("ctx").contains(ev.target) && !($("ctxTypes") && $("ctxTypes").contains(ev.target)) &&
+        !($("ctxLoadout") && $("ctxLoadout").contains(ev.target))) hideCtx();
+  });
+  on("typesPickFolder", "click", importTypesFolder);
+  on("typesCancel", "click", closeTypesWizard);
+  on("typesAdd", "click", () => addSelectedTypes());
+  on("typesAddBlank", "click", addBlankMarketItem);
+  on("typesFilter", "input", (ev) => {
     state.types.filter = ev.target.value;
     renderTypesList();
   });
-  $("typesHideUsed").addEventListener("change", (ev) => {
+  on("typesHideUsed", "change", (ev) => {
     state.types.hideUsed = ev.target.checked;
     renderTypesList();
   });
-  $("typesSelectVisible").addEventListener("click", () => {
+  on("typesSelectVisible", "click", () => {
     if (wizardMode() === "attachments") {
       for (const entry of filteredTypes()) addAttach(entry.name, 1);
     } else {
@@ -2757,28 +3304,28 @@
     }
     renderTypesList();
   });
-  $("typesClearSel").addEventListener("click", () => {
+  on("typesClearSel", "click", () => {
     state.types.selected = new Set();
     state.types.attachCounts = new Map();
     renderTypesList();
   });
-  $("typesDestFile").addEventListener("focus", () => {
+  on("typesDestFile", "focus", () => {
     const existing = document.querySelector("input[name='typesDest'][value='existing']");
     if (existing) existing.checked = true;
   });
-  $("typesNewName").addEventListener("focus", () => {
+  on("typesNewName", "focus", () => {
     const neu = document.querySelector("input[name='typesDest'][value='new']");
     if (neu) neu.checked = true;
   });
 
-  $("iconSearch").addEventListener("input", (ev) => {
+  on("iconSearch", "input", (ev) => {
     const needle = ev.target.value.trim().toLowerCase();
     document.querySelectorAll("#iconGrid .icon-opt").forEach((opt) => {
       const name = (opt.dataset.icon || "").toLowerCase();
       opt.classList.toggle("is-hidden", Boolean(needle) && !name.includes(needle));
     });
   });
-  $("iconGrid").addEventListener("click", (ev) => {
+  on("iconGrid", "click", (ev) => {
     const opt = ev.target.closest("[data-icon]");
     if (opt) applyIconChoice(opt.dataset.icon);
   });
@@ -2835,14 +3382,15 @@
       deleteSelectedMarketItems();
     }
   });
-  $("browserCancel").addEventListener("click", () => $("browser").classList.add("hidden"));
-  $("browserUp").addEventListener("click", async () => {
+  on("browserCancel", "click", () => $("browser").classList.add("hidden"));
+  on("browserUp", "click", async () => {
     try { await loadBrowser(state.browser.parent || ""); } catch (err) { hideProgress(); toast(err.message, true); }
   });
-  $("useMarket").addEventListener("click", () => { state.browser.picks.market = currentBrowserFolder(); updatePickLabels(); });
-  $("useTraders").addEventListener("click", () => { state.browser.picks.traders = currentBrowserFolder(); updatePickLabels(); });
-  $("useZones").addEventListener("click", () => { state.browser.picks.zones = currentBrowserFolder(); updatePickLabels(); });
-  $("browserAuto").addEventListener("click", async () => {
+  on("useMarket", "click", () => { state.browser.picks.market = currentBrowserFolder(); updatePickLabels(); });
+  on("useTraders", "click", () => { state.browser.picks.traders = currentBrowserFolder(); updatePickLabels(); });
+  on("useZones", "click", () => { state.browser.picks.zones = currentBrowserFolder(); updatePickLabels(); });
+  on("useLoadouts", "click", () => { state.browser.picks.loadouts = currentBrowserFolder(); updatePickLabels(); });
+  on("browserAuto", "click", async () => {
     const s = state.browser.suggestions || {};
     if (s.expansionMod && !s.market && !s.traders) {
       try { await loadBrowser(s.expansionMod); } catch (err) { hideProgress(); toast(err.message, true); }
@@ -2851,24 +3399,26 @@
     if (s.market) state.browser.picks.market = s.market;
     if (s.traders) state.browser.picks.traders = s.traders;
     if (s.zones) state.browser.picks.zones = s.zones;
-    if (!s.market && !s.traders && !s.zones) {
-      toast("No Market / Traders / TraderZones folders in this directory. Open ExpansionMod or the mission folder.", true);
+    if (s.loadouts) state.browser.picks.loadouts = s.loadouts;
+    if (!s.market && !s.traders && !s.zones && !s.loadouts) {
+      toast("No Market / Traders / TraderZones / Loadouts folders in this directory. Open ExpansionMod or the mission folder.", true);
     }
     updatePickLabels();
   });
-  $("browserApply").addEventListener("click", applyBrowserPaths);
+  on("browserApply", "click", applyBrowserPaths);
 
   async function boot() {
+    render();
     try {
       const data = await api("listProfiles");
       state.profiles = data.profiles || [];
+      render();
     } catch (err) {
       toast(err.message, true);
     }
     try {
       applyTypesCatalog(await api("getTypesCatalog"));
     } catch { /* first run has no catalog */ }
-    render();
   }
 
   boot();

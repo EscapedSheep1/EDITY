@@ -1,0 +1,41 @@
+{
+    "ClassName": "SurvivorM_Jose",
+    "Chance": 1.0,
+    "Quantity": {
+        "Min": 0.0,
+        "Max": 0.0
+    },
+    "Health": [
+        {
+            "Min": 1.0,
+            "Max": 1.0,
+            "Zone": ""
+        }
+    ],
+    "Inventory": [
+        {
+            "ClassName": "Rag",
+            "Chance": 1.0,
+            "Quantity": { "Min": 4.0, "Max": 4.0 }
+        }
+    ],
+    "Attachments": [
+        {
+            "ClassName": "TacticalShirt_Black",
+            "Chance": 1.0
+        },
+        {
+            "ClassName": "CargoPants_Black",
+            "Chance": 1.0
+        }
+    ],
+    "Sets": [
+        {
+            "ClassName": "",
+            "Chance": 0.5,
+            "Inventory": [
+                { "ClassName": "AKM", "Chance": 1.0 }
+            ]
+        }
+    ]
+}

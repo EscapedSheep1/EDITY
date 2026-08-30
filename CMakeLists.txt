@@ -33,6 +33,7 @@ set(EDITY_SOURCES
     src/backup/ZipArchive.cpp
     src/types/TypesCatalog.cpp
     src/types/TypesXmlIO.cpp
+    src/loadout/LoadoutIO.cpp
 )
 
 add_executable(EDITY WIN32 ${EDITY_SOURCES})
@@ -95,6 +96,7 @@ add_executable(edity_tests
     src/market/Validator.cpp
     src/types/TypesCatalog.cpp
     src/types/TypesXmlIO.cpp
+    src/loadout/LoadoutIO.cpp
 )
 
 target_include_directories(edity_tests PRIVATE src)

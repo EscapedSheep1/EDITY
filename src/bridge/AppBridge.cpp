@@ -231,6 +231,8 @@ nlohmann::json AppBridge::Dispatch(const std::string& cmd, const nlohmann::json&
                     suggestions["traders"] = entry.path;
                 } else if (key == "traderzones" || key == "traderzone" || key == "zones") {
                     suggestions["zones"] = entry.path;
+                } else if (key == "loadouts" || key == "loadout") {
+                    suggestions["loadouts"] = entry.path;
                 } else if (key == "expansionmod") {
                     suggestions["expansionMod"] = entry.path;
                 }
@@ -279,6 +281,8 @@ nlohmann::json AppBridge::Dispatch(const std::string& cmd, const nlohmann::json&
             workspace_->SaveZone(body);
         } else if (kind == FileKind::Types) {
             workspace_->SaveTypes(body);
+        } else if (kind == FileKind::Loadout) {
+            workspace_->SaveLoadout(body);
         } else {
             workspace_->SaveZone(body);
         }

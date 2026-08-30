@@ -6,7 +6,7 @@
 
 <p align="center">
   <strong>Expansion Trader Desk</strong> — a Windows editor for DayZ Expansion<br>
-  Market, Traders, TraderZones, and mission <code>types.xml</code>
+  Market, Traders, TraderZones, Loadouts, and mission <code>types.xml</code>
 </p>
 
 <p align="center">
@@ -47,10 +47,11 @@ Open **LINK**. Fill in a profile:
 | Market path | `/ExpansionMod/Market` |
 | Traders path | `/ExpansionMod/Traders` |
 | TraderZones path | `/mpmissions/dayzOffline.chernarusplus/expansion/traderzones` |
+| Loadouts path | `/ExpansionMod/Loadouts` |
 
 The TraderZones path is also how EDITY finds the mission folder and `cfgeconomycore.xml`.
 
-Use **Test** to ping the host, **Browse** if you are unsure of the folders, then **Save profile** and **Connect**. Connect pulls every JSON file in those three folders plus the mission types files.
+Use **Test** to ping the host, **Browse** if you are unsure of the folders, then **Save profile** and **Connect**. Connect pulls every JSON file in those folders plus the mission types files.
 
 ### 2. Edit the market
 
@@ -88,7 +89,17 @@ Useful actions:
 
 `ZmbF_*` and `ZmbM_*` infected types are skipped by lint. Missing category is not a lint warning.
 
-### 5. Lint
+### 5. Loadouts
+
+**LOADOUTS** edits Expansion kit JSON (`ClassName`, `Include`, `Chance`, `Quantity`, `Health`, `InventoryAttachments`, `InventoryCargo`, `Sets`).
+
+- Tree of the selected file. Click a node to edit it. Right-click to add slots, cargo, chance sets, or duplicate.
+- Root classname is a Survivor body (`SurvivorM_*` / `SurvivorF_*`). Nested items use the same fields.
+- Quantity `0/0` is a single item. Use min/max for stacks. Chance is 0–1; Sets are rolled among siblings.
+- **Add from types** drops pulled CE classnames into a slot, cargo, or a new chance set.
+- Save writes modern Expansion JSON. Classic `Attachments` / `Inventory` files still pull.
+
+### 6. Lint
 
 Click **LINT** (or save). The drawer lists errors and warnings. Click a row to jump to the file and field.
 
@@ -96,7 +107,7 @@ If an attachment, variant, trader item, or zone stock is not a ClassName or Vari
 
 Upload is blocked while any **error** remains. Warnings do not block.
 
-### 6. Upload
+### 7. Upload
 
 1. Save the files you care about (**Save + lint**).
 2. Click the green **Upload all changes** button in the top bar.
@@ -115,6 +126,8 @@ Upload is blocked while any **error** remains. Warnings do not block.
 **Zones** — display name, radius, stock duplicates / negatives; warning if stock is not in market.
 
 **Types** — empty or duplicate classnames, min &gt; nominal, bad quant range, lifetime 0 on loot. Infected `ZmbF` / `ZmbM` types are ignored.
+
+**Loadouts** — ClassName or Include required (empty name is allowed on Sets), Chance 0–1, quantity min ≤ max, health 0–1. Warns if a classname is not in types or an Include file is missing.
 
 ---
 

@@ -7,6 +7,7 @@
 #include "market/JsonIO.h"
 #include "types/TypesCatalog.h"
 #include "types/TypesXmlIO.h"
+#include "loadout/LoadoutIO.h"
 
 #include <algorithm>
 #include <future>
@@ -125,6 +126,7 @@ Workspace::Workspace(ConnectionProfile profile, TransferClient::Config transfer)
     EnsureDirectory(KindDir(root_, "Traders"));
     EnsureDirectory(KindDir(root_, "TraderZones"));
     EnsureDirectory(KindDir(root_, "Types"));
+    EnsureDirectory(KindDir(root_, "Loadouts"));
 }
 
 void Workspace::SetProgress(TransferClient::ProgressFn fn) {
@@ -137,6 +139,8 @@ std::string Workspace::RemotePath(FileKind kind) const {
             return profile_.tradersPath;
         case FileKind::TraderZone:
             return profile_.zonesPath;
+        case FileKind::Loadout:
+            return profile_.loadoutsPath;
         case FileKind::Market:
         default:
             return profile_.marketPath;
@@ -152,7 +156,7 @@ void Workspace::MarkDirty(FileKind kind, const std::string& filename) {
 }
 
 void Workspace::ClearLocal() {
-    for (const char* kind : {"Market", "Traders", "TraderZones", "Types"}) {
+    for (const char* kind : {"Market", "Traders", "TraderZones", "Types", "Loadouts"}) {
         const auto dir = KindDir(root_, kind);
         std::error_code ec;
         for (const auto& item : std::filesystem::directory_iterator(dir, ec)) {
@@ -165,6 +169,7 @@ void Workspace::ClearLocal() {
     typesCatalog_ = {};
     typesFiles_.clear();
     economyCoreXml_.clear();
+    loadouts_.clear();
     quarantine_.clear();
     extraIssues_.clear();
     dirty_.clear();
@@ -191,6 +196,15 @@ void Workspace::Ingest(FileKind kind, const std::string& filename, const std::st
                                "Downloaded data is not a JSON object. The remote path is probably a parent folder "
                                "or a directory listing was treated as a file. Browse the server and select the "
                                "Market, Traders, and TraderZones directories."});
+        return;
+    }
+    if (kind == FileKind::Loadout) {
+        auto parsed = ParseLoadout(filename, raw);
+        if (!parsed.ok) {
+            quarantine_.push_back({kind, filename, parsed.error});
+            return;
+        }
+        loadouts_[FileKey(filename)] = std::move(parsed.file);
         return;
     }
     const auto objectName = kind == FileKind::TraderZone ? "Stock" : "Items";
@@ -238,6 +252,7 @@ void Workspace::LoadLocal() {
     markets_.clear();
     traders_.clear();
     zones_.clear();
+    loadouts_.clear();
     quarantine_.clear();
     extraIssues_.clear();
 
@@ -245,6 +260,7 @@ void Workspace::LoadLocal() {
         {FileKind::Market, "Market"},
         {FileKind::Trader, "Traders"},
         {FileKind::TraderZone, "TraderZones"},
+        {FileKind::Loadout, "Loadouts"},
     };
     for (const auto& [kind, name] : kinds) {
         const auto dir = KindDir(root_, name);
@@ -278,6 +294,7 @@ void Workspace::PullAll() {
         {FileKind::Market, profile_.marketPath},
         {FileKind::Trader, profile_.tradersPath},
         {FileKind::TraderZone, profile_.zonesPath},
+        {FileKind::Loadout, profile_.loadoutsPath},
     };
 
     struct Listed {
@@ -421,6 +438,9 @@ WorkspaceSnapshot Workspace::Snapshot() const {
     for (const auto& [_, file] : typesFiles_) {
         snap.typesFiles.push_back(file);
     }
+    for (const auto& [_, file] : loadouts_) {
+        snap.loadouts.push_back(file);
+    }
     return snap;
 }
 
@@ -435,6 +455,7 @@ nlohmann::json Workspace::ToUiJson() const {
     nlohmann::json traders = nlohmann::json::array();
     nlohmann::json zones = nlohmann::json::array();
     nlohmann::json typesFiles = nlohmann::json::array();
+    nlohmann::json loadouts = nlohmann::json::array();
     for (const auto& [_, cat] : markets_) {
         markets.push_back(MarketToUi(cat));
     }
@@ -446,6 +467,9 @@ nlohmann::json Workspace::ToUiJson() const {
     }
     for (const auto& [_, file] : typesFiles_) {
         typesFiles.push_back(TypesFileToUi(file));
+    }
+    for (const auto& [_, file] : loadouts_) {
+        loadouts.push_back(LoadoutToUi(file));
     }
     nlohmann::json dirty = nlohmann::json::array();
     for (const auto& key : dirty_) {
@@ -462,6 +486,7 @@ nlohmann::json Workspace::ToUiJson() const {
         {"traders", traders},
         {"zones", zones},
         {"typesFiles", typesFiles},
+        {"loadouts", loadouts},
         {"quarantine", quarantine_},
         {"dirty", dirty},
         {"pendingDeletes", deletes},
@@ -535,6 +560,15 @@ void Workspace::SaveTypes(const nlohmann::json& body) {
     RebuildTypesCatalog();
 }
 
+void Workspace::SaveLoadout(const nlohmann::json& body) {
+    auto file = LoadoutFromUi(body);
+    file.filename = ResolveExistingName(loadouts_, file.filename);
+    const auto filename = file.filename;
+    Persist(FileKind::Loadout, filename, SerializeLoadout(file));
+    loadouts_[FileKey(filename)] = std::move(file);
+    MarkDirty(FileKind::Loadout, filename);
+}
+
 void Workspace::SaveMarket(const nlohmann::json& body) {
     auto cat = MarketFromUi(body);
     cat.filename = ResolveExistingName(markets_, cat.filename);
@@ -580,6 +614,17 @@ nlohmann::json Workspace::CreateWorkspaceFile(FileKind kind, const std::string& 
         }
         RebuildTypesCatalog();
         return TypesFileToUi(doc);
+    }
+    if (kind == FileKind::Loadout) {
+        const auto clean = JsonFileName(filename);
+        if (loadouts_.contains(FileKey(clean))) {
+            throw std::runtime_error("A Loadout file with that name already exists");
+        }
+        auto file = DefaultLoadout(clean);
+        loadouts_[FileKey(clean)] = file;
+        Persist(kind, clean, SerializeLoadout(file));
+        MarkDirty(kind, clean);
+        return LoadoutToUi(file);
     }
     const auto clean = JsonFileName(filename);
     const int version = SiblingVersion(kind);
@@ -636,6 +681,8 @@ void Workspace::DeleteWorkspaceFile(FileKind kind, const std::string& filename) 
         markets_.erase(key);
     } else if (kind == FileKind::Trader) {
         traders_.erase(key);
+    } else if (kind == FileKind::Loadout) {
+        loadouts_.erase(key);
     } else {
         zones_.erase(key);
     }
@@ -691,6 +738,8 @@ nlohmann::json Workspace::ConfirmUpload() {
                     contents = SerializeMarket(markets_.at(FileKey(filename)));
                 } else if (kind == FileKind::Trader) {
                     contents = SerializeTrader(traders_.at(FileKey(filename)));
+                } else if (kind == FileKind::Loadout) {
+                    contents = SerializeLoadout(loadouts_.at(FileKey(filename)));
                 } else {
                     contents = SerializeZone(zones_.at(FileKey(filename)));
                 }

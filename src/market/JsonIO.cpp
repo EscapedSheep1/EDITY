@@ -382,6 +382,7 @@ void to_json(nlohmann::json& j, const ConnectionProfile& p) {
         {"marketPath", p.marketPath},
         {"tradersPath", p.tradersPath},
         {"zonesPath", p.zonesPath},
+        {"loadoutsPath", p.loadoutsPath},
     };
 }
 
@@ -396,6 +397,7 @@ void from_json(const nlohmann::json& j, ConnectionProfile& p) {
     p.marketPath = JsonString(j, "marketPath");
     p.tradersPath = JsonString(j, "tradersPath");
     p.zonesPath = JsonString(j, "zonesPath");
+    p.loadoutsPath = JsonString(j, "loadoutsPath");
 }
 
 void to_json(nlohmann::json& j, const MarketItem& item) {

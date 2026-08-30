@@ -12,6 +12,7 @@ struct WorkspaceSnapshot {
     std::vector<TraderFile> traders;
     std::vector<TraderZone> zones;
     std::vector<TypesDocument> typesFiles;
+    std::vector<LoadoutFile> loadouts;
     std::vector<QuarantineFile> quarantine;
 };
 

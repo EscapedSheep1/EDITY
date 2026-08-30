@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Loadouts
+- Designate an Expansion Loadouts folder on the connection profile (default `/ExpansionMod/Loadouts`)
+- Pull, save, lint, and upload loadout JSON with Market / Traders / Zones
+- Tree editor for ClassName, Include, Chance, Quantity, Health zones, slotted attachments, cargo, and chance Sets
+- Add kit items from pulled types into a slot, cargo, or a new set
+- Reads classic `Attachments` / `Inventory` files; writes the modern Expansion tree
+- Rejects `SpawnSettings.json`; warns on unknown classnames and missing Include files
+
 ## 1.0.0 — 2026-08-30
 
 First public build of EDITY.
